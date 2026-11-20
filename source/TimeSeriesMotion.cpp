@@ -31,6 +31,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QMap>
 #include <QJsonValue>
 #include <QRegularExpression>
 #include <QTextStream>
@@ -78,11 +79,9 @@ TimeSeriesMotion::TimeSeriesMotion(const QString &fileName, double scale,
   _stopLine = 0;
   _scale = 1.0;
 
-  if (!_fileName.isEmpty() && load(_fileName, true, scale)) {
-    *successful = true;
-  } else {
-    *successful = false;
-  }
+  const bool loaded = !_fileName.isEmpty() && load(_fileName, true, scale);
+  if (successful)
+    *successful = loaded;
 }
 
 TimeSeriesMotion::~TimeSeriesMotion() {}
@@ -357,6 +356,69 @@ auto TimeSeriesMotion::toHtml() const -> QString {
   return html;
 }
 
+auto TimeSeriesMotion::loadEsmHeader(QTextStream &stream) -> bool {
+  // ESM ASCII header lines look like "SAMPLING_INTERVAL_S: 0.005000".
+  static const QRegularExpression keyRx(
+      "^\\s*([A-Z0-9_/^.\\-]+)\\s*:\\s*(.*)$");
+
+  stream.seek(0);
+  QMap<QString, QString> header;
+  int headerLines = 0;
+  while (!stream.atEnd()) {
+    const QString line = stream.readLine();
+    const QRegularExpressionMatch match = keyRx.match(line);
+    if (!match.hasMatch())
+      break;
+    header.insert(match.captured(1).toUpper(), match.captured(2).trimmed());
+    ++headerLines;
+  }
+  stream.seek(0);
+
+  if (!header.contains("SAMPLING_INTERVAL_S"))
+    return false;
+
+  bool ok = false;
+  const double dt = header.value("SAMPLING_INTERVAL_S").toDouble(&ok);
+  if (!ok || dt <= 0) {
+    qCritical() << "Unable to parse SAMPLING_INTERVAL_S in ESM file!";
+    return false;
+  }
+
+  setFormat(Rows);
+  setTimeStep(dt);
+  setStartLine(headerLines + 1);
+  setStopLine(0);
+  // Let the reader count the points, NDATA is only used as a check below
+  setPointCount(0);
+
+  const QString units = header.value("UNITS").toLower().remove(' ');
+  if (units.isEmpty() || units.startsWith("cm/s")) {
+    setInputUnits(CentimetersPerSecondSquared);
+  } else if (units.startsWith("m/s")) {
+    setInputUnits(MetersPerSecondSquared);
+  } else if (units == "g") {
+    setInputUnits(Gravity);
+  } else {
+    qWarning() << "Unknown UNITS in ESM file:" << units
+               << "- assuming cm/s^2";
+    setInputUnits(CentimetersPerSecondSquared);
+  }
+
+  QStringList desc;
+  for (const QString &key : {"EVENT_NAME", "EVENT_ID", "EVENT_DATE_YYYYMMDD",
+                             "NETWORK", "STATION_CODE", "STREAM"}) {
+    const QString value = header.value(key);
+    if (!value.isEmpty() && value != "None")
+      desc << value;
+  }
+  if (!header.value("MAGNITUDE_W").isEmpty())
+    desc << QString("Mw %1").arg(header.value("MAGNITUDE_W"));
+  if (!header.value("EPICENTRAL_DISTANCE_KM").isEmpty())
+    desc << QString("Repi %1 km").arg(header.value("EPICENTRAL_DISTANCE_KM"));
+  setDescription(desc.join(" "));
+  return true;
+}
+
 auto TimeSeriesMotion::load(const QString &fileName, bool defaults,
                             double scale) -> bool {
   _accel.clear();
@@ -374,7 +436,12 @@ auto TimeSeriesMotion::load(const QString &fileName, bool defaults,
   QTextStream stream(&file);
 
   if (defaults) {
-    if (ext == "AT2") {
+    if (loadEsmHeader(stream)) {
+      // ESM / ITACA ASCII format (e.g., files downloaded with REXELite):
+      // "KEY: value" header followed by one acceleration value per line.
+      setScale(scale);
+    } else if (ext == "AT2") {
+      stream.seek(0);
       // Set format
       setFormat(Rows);
       setStartLine(5);

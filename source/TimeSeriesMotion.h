@@ -26,6 +26,7 @@
 
 #include <QDataStream>
 #include <QJsonObject>
+#include <QTextStream>
 
 #include <complex>
 
@@ -149,6 +150,11 @@ public:
    * \param scale factor to apply to the motion
    * \return if the motion was successfully loaded.
    */
+  /*! Parse an ESM / ITACA ASCII header and set the reading parameters.
+   * \return true if the stream contains an ESM header.
+   */
+  auto loadEsmHeader(QTextStream &stream) -> bool;
+
   auto load(const QString &fileName, bool defaults = true, double scale = 1.0)
       -> bool;
 

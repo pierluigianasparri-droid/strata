@@ -46,6 +46,7 @@
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
+#include <QMessageBox>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSettings>
@@ -89,10 +90,12 @@ void MotionPage::setReadOnly(bool readOnly) {
   _addButton->setHidden(readOnly);
   _removeButton->setHidden(readOnly);
   _importButton->setHidden(readOnly);
+  _addMultipleButton->setHidden(readOnly);
   _editButton->setText(readOnly ? tr("View") : tr("Edit"));
 }
 
 void MotionPage::setApproach(int i) {
+  _addMultipleButton->setEnabled(i == MotionLibrary::TimeSeries);
   _tableView->setColumnHidden(MotionLibrary::ScaleColumn,
                               i == MotionLibrary::RandomVibrationTheory);
 }
@@ -121,6 +124,14 @@ auto MotionPage::createMotionsTableGroupBox() -> QGroupBox * {
   _addButton = new QPushButton(QIcon(":/images/list-add.svg"), tr("Add"));
   connect(_addButton, &QPushButton::clicked, this, &MotionPage::add);
   buttonRow->addWidget(_addButton);
+
+  _addMultipleButton = new QPushButton(QIcon(":/images/document-import.svg"),
+                                       tr("Add Files..."));
+  _addMultipleButton->setToolTip(
+      tr("Load several acceleration time series at once (AT2, ESM/ITACA)"));
+  connect(_addMultipleButton, &QPushButton::clicked, this,
+          &MotionPage::addMultiple);
+  buttonRow->addWidget(_addMultipleButton);
 
   _removeButton =
       new QPushButton(QIcon(":/images/list-remove.svg"), tr("Remove"));
@@ -230,6 +241,66 @@ void MotionPage::remove() {
   _motionLibrary->removeRows(selectedRows.first().row(), selectedRows.size());
 }
 
+static void reportFailedFiles(QWidget *parent, const QStringList &failed) {
+  if (failed.isEmpty())
+    return;
+  QStringList names;
+  for (const QString &f : failed)
+    names << QFileInfo(f).fileName();
+  QMessageBox::warning(
+      parent, QObject::tr("Load motions - Strata"),
+      QObject::tr("%1 file(s) could not be loaded automatically. Add them "
+                  "one at a time with \"Add\" to set the format by hand:\n\n%2")
+          .arg(failed.size())
+          .arg(names.join("\n")));
+}
+
+void MotionPage::addMultiple() {
+  if (_motionLibrary->approach() != MotionLibrary::TimeSeries)
+    return;
+
+  QSettings settings;
+  const QStringList fileNames = QFileDialog::getOpenFileNames(
+      this, tr("Select acceleration time series... - Strata"),
+      settings
+          .value("motionDirectory", QStandardPaths::writableLocation(
+                                        QStandardPaths::DocumentsLocation))
+          .toString(),
+      tr("Time series (*.AT2 *.at2 *.ASC *.asc *.txt *.TXT);;All files (*)"));
+
+  if (fileNames.isEmpty())
+    return;
+
+  settings.setValue("motionDirectory",
+                    QFileInfo(fileNames.first()).absolutePath());
+
+  QProgressDialog progressDialog(tr("Loading motions..."), tr("Abort"), 0,
+                                 fileNames.size(), this);
+  progressDialog.setWindowModality(Qt::WindowModal);
+
+  QStringList failed;
+  int i = 0;
+  for (const QString &fileName : fileNames) {
+    if (progressDialog.wasCanceled())
+      break;
+    bool ok = false;
+    auto *tsm = new TimeSeriesMotion(fileName, 1.0, AbstractMotion::Outcrop,
+                                     &ok, _motionLibrary);
+    if (ok) {
+      tsm->setSaveData(_motionLibrary->saveData());
+      _motionLibrary->addMotion(tsm);
+    } else {
+      tsm->deleteLater();
+      failed << fileName;
+    }
+    progressDialog.setValue(++i);
+  }
+
+  _tableView->resizeColumnsToContents();
+  _tableView->resizeRowsToContents();
+  reportFailedFiles(this, failed);
+}
+
 void MotionPage::importSuite() {
   QSettings settings;
   // Prompt for the file to load
@@ -262,28 +333,32 @@ void MotionPage::importSuite() {
 
     // Count the number of lines
     QTextStream stream(&file);
-    QString line = stream.readLine();
     QStringList lines;
-    while (!line.isNull()) {
-      if (!line.startsWith("#"))
+    while (!stream.atEnd()) {
+      const QString line = stream.readLine().trimmed();
+      if (!line.isEmpty() && !line.startsWith("#"))
         lines << line;
     }
-
-    // FIXME: Check this
+    QStringList failed;
 
     // Load each of the filename/scale pairs in a map
     QProgressDialog progressDialog(tr("Loading motion suite..."), tr("Abort"),
                                    1, lines.size(), this);
     progressDialog.setWindowModality(Qt::WindowModal);
 
-    foreach (line, lines) {
+    for (const QString &line : lines) {
+      if (progressDialog.wasCanceled())
+        break;
       QStringList args = line.split(",");
       if (args.size() < 1 || args.size() > 3) {
         qCritical() << tr("Invalid file format on line:") << line;
         return;
       }
 
-      const QString _fileName = args.takeFirst();
+      QString _fileName = args.takeFirst().trimmed();
+      // Paths in the suite file may be relative to the suite file
+      if (QFileInfo(_fileName).isRelative())
+        _fileName = fileInfo.absoluteDir().filePath(_fileName);
 
       double scale = 1;
       auto type = AbstractMotion::Outcrop;
@@ -301,7 +376,7 @@ void MotionPage::importSuite() {
       if (args.size() > 1) {
         type = AbstractMotion::variantToType(args.at(1), &ok);
         if (!ok) {
-          qCritical() << "Unknown type specified:" << args.at(2)
+          qCritical() << "Unknown type specified:" << args.at(1)
                       << ". Valid options are 'Outcrop'"
                       << "\nAssuming 'Outcrop'";
           type = AbstractMotion::Outcrop;
@@ -311,16 +386,23 @@ void MotionPage::importSuite() {
       if (_motionLibrary->approach() == MotionLibrary::TimeSeries) {
         // Load the motion
         auto *tsm = new TimeSeriesMotion(_fileName, scale, type, &ok);
-        if (ok)
+        if (ok) {
+          tsm->setSaveData(_motionLibrary->saveData());
           _motionLibrary->addMotion(tsm);
+        } else {
+          tsm->deleteLater();
+          failed << _fileName;
+        }
       } else {
         auto *arm = loadRvtMotionFromTextFile(_fileName, scale);
         if (arm)
           _motionLibrary->addMotion(arm);
+        else
+          failed << _fileName;
       }
       progressDialog.setValue(_motionLibrary->rowCount());
     }
-    line = stream.readLine();
+    reportFailedFiles(this, failed);
   }
 
   _tableView->resizeColumnsToContents();

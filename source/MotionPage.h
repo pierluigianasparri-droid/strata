@@ -52,6 +52,8 @@ private slots:
   void add();
   void remove();
   void importSuite();
+  //! Add several time series files at once (multi-selection)
+  void addMultiple();
 
   void edit();
 
@@ -71,6 +73,7 @@ private:
   QPushButton *_removeButton;
   QPushButton *_editButton;
   QPushButton *_importButton;
+  QPushButton *_addMultipleButton;
   MyTableView *_tableView;
 
   DepthComboBox *_depthComboBox;
