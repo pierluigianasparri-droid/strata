@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - dev
+      - batch-import-esm
+  workflow_dispatch:
   release:
     types: [published]
 
