@@ -82,6 +82,19 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install ninja
 
+      - name: Setup Python (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build RSL Tools (Windows)
+        if: runner.os == 'Windows'
+        working-directory: contrib/rsl-tools
+        run: |
+          python -m pip install -r requirements.txt pyinstaller
+          pyinstaller --noconfirm --onefile --windowed --name RSL-Tools --add-data "rsltools/data;rsltools/data" rsl_tools.py
+
       - name: Setup MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1

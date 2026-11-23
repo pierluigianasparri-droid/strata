@@ -45,11 +45,14 @@
 #include <QDebug>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPrintDialog>
+#include <QProcess>
+#include <QSettings>
 #include <QScrollArea>
 #include <QStandardPaths>
 #include <QStatusBar>
@@ -142,6 +145,15 @@ void MainWindow::createActions() {
   connect(_confiningStressDialogAction, &QAction::triggered, this,
           &MainWindow::showConfiningStressDialog);
 
+  _rslToolsAction = new QAction(QIcon(":/images/document-export.svg"),
+                                tr("RSL Tools (regularization and report)..."),
+                                this);
+  _rslToolsAction->setStatusTip(
+      tr("Open RSL Tools to regularize the spectra (NTC 2018) and write the "
+         "report"));
+  connect(_rslToolsAction, &QAction::triggered, this,
+          &MainWindow::launchRslTools);
+
   // Help Action
   _helpAction =
       new QAction(QIcon(":/images/help-browser.svg"), tr("&User Manual"), this);
@@ -224,6 +236,8 @@ void MainWindow::createMenus() {
   toolsMenu->addSeparator();
   toolsMenu->addAction(_nlCurveDatabaseAction);
   toolsMenu->addAction(_confiningStressDialogAction);
+  toolsMenu->addSeparator();
+  toolsMenu->addAction(_rslToolsAction);
 
   QMenu *windowMenu = menuBar()->addMenu(tr("&Window"));
   windowMenu->addAction(_toolBar->toggleViewAction());
@@ -450,6 +464,43 @@ void MainWindow::showConfiningStressDialog() {
   _confiningStressDialog->show();
   _confiningStressDialog->raise();
   _confiningStressDialog->activateWindow();
+}
+
+void MainWindow::launchRslTools() {
+#ifdef Q_OS_WIN
+  const QString exeName = "RSL-Tools.exe";
+#else
+  const QString exeName = "RSL-Tools";
+#endif
+  QSettings settings;
+  QStringList candidates;
+  candidates << QDir(QCoreApplication::applicationDirPath()).filePath(exeName)
+             << settings.value("rslToolsPath").toString();
+
+  QString program;
+  for (const QString &c : candidates) {
+    if (!c.isEmpty() && QFileInfo::exists(c)) {
+      program = c;
+      break;
+    }
+  }
+
+  if (program.isEmpty()) {
+    program = QFileDialog::getOpenFileName(
+        this, tr("Locate RSL Tools - Strata"),
+        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation),
+        tr("RSL Tools (%1)").arg(exeName));
+    if (program.isEmpty())
+      return;
+    settings.setValue("rslToolsPath", program);
+  }
+
+  if (!QProcess::startDetached(program, QStringList(),
+                               QFileInfo(program).absolutePath())) {
+    QMessageBox::warning(this, tr("RSL Tools - Strata"),
+                         tr("Unable to start RSL Tools:\n%1").arg(program));
+    settings.remove("rslToolsPath");
+  }
 }
 
 void MainWindow::help() { _helpDialog->show(); }

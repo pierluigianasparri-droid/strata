@@ -109,6 +109,11 @@ elseif (WIN32)
         ${CMAKE_SOURCE_DIR}/example
         DESTINATION ${CMAKE_INSTALL_DATADIR}/${CMAKE_PROJECT_NAME}
     )
+    # RSL Tools companion program, if it was built beforehand with PyInstaller
+    # (see contrib/rsl-tools and .github/workflows/release.yml)
+    if (EXISTS "${RSL_TOOLS_EXE}")
+        install(PROGRAMS "${RSL_TOOLS_EXE}" DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
 elseif (APPLE)
     install(TARGETS ${CMAKE_PROJECT_NAME}
         BUNDLE DESTINATION .

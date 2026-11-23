@@ -85,6 +85,9 @@ endif()
 
 include(GNUInstallDirs)
 
+# Optional RSL Tools executable bundled with the Windows installer
+set(RSL_TOOLS_EXE "${CMAKE_SOURCE_DIR}/contrib/rsl-tools/dist/RSL-Tools.exe")
+
 set(LIBS ${LIBS} GSL::gsl unofficial::qwt::qwt)
 include_directories(${QWT_INCLUDE_DIR})
 
@@ -139,6 +142,11 @@ if(WIN32)
     set(CPACK_GENERATOR "NSIS;ZIP")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/win/appicon.ico")
+    # Start menu shortcuts
+    set(CPACK_PACKAGE_EXECUTABLES "strata;Strata")
+    if(EXISTS "${RSL_TOOLS_EXE}")
+        list(APPEND CPACK_PACKAGE_EXECUTABLES "RSL-Tools;RSL Tools")
+    endif()
 elseif(APPLE)
     set(CPACK_GENERATOR "DragNDrop")
 else()

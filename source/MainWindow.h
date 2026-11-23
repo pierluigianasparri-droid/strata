@@ -72,6 +72,8 @@ protected slots:
 
   void showNonlinearDialog();
   void showConfiningStressDialog();
+  //! Launch the RSL Tools companion program (regularization and report)
+  void launchRslTools();
 
   //! Update the title of the window to reflect the fileName of the document
   void updateWindowTitle(const QString &fileName);
@@ -130,6 +132,7 @@ private:
 
   QAction *_nlCurveDatabaseAction;
   QAction *_confiningStressDialogAction;
+  QAction *_rslToolsAction;
 
   QAction *_helpAction;
   QAction *_updateAction;
