@@ -233,10 +233,16 @@ class App(tk.Tk):
                                  log=lambda t: self.after(0, self.log, t))
                 self.after(0, self.log, f"Relazione salvata: {uscita}\n"
                            "In Word premi F9 sull'indice per aggiornarlo.")
-                if os.name == "nt":
-                    os.startfile(uscita)  # noqa: S606
             except Exception:  # noqa: BLE001
                 self.after(0, self.log, traceback.format_exc())
+                return
+            if os.name == "nt":
+                # os.startfile vuole il percorso con le barre di Windows
+                # (necessario per le cartelle di rete \\NAS\...)
+                try:
+                    os.startfile(os.path.normpath(uscita))  # noqa: S606
+                except OSError as e:
+                    self.after(0, self.log, f"Relazione salvata ma non aperta automaticamente: {e}")
         threading.Thread(target=lavoro, daemon=True).start()
 
     def salva(self):
