@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -113,8 +114,12 @@ def leggi_progetto(path: str, profondita: float = 0.0) -> RisultatoRSL:
         moti.append(Moto(nome, m.get("fileName", ""), (m.get("description") or "").strip(),
                          float(m.get("scale", 1.0)), pga))
     attivi = [mo for mo, mj in zip(moti, moti_json) if mj.get("enabled", True)]
-    nomi = [mo.nome for mo in attivi] if len(attivi) == sito.shape[0] else \
-        [f"{i + 1}" for i in range(sito.shape[0])]
+    if len(attivi) == sito.shape[0]:
+        moti = attivi
+    if len(moti) == sito.shape[0]:
+        nomi = [mo.nome for mo in moti]
+    else:
+        nomi = [f"{i + 1}" for i in range(sito.shape[0])]
 
     sp = d["siteProfile"]
     catalogo = sp.get("soilTypeCatalog", [])
@@ -159,6 +164,45 @@ def leggi_csv(path: str) -> RisultatoRSL:
     arr = np.array([[float(r[0])] + [float(r[i]) for i in keep] for r in rows if len(r) > max(keep)])
     nomi = [header[i].removeprefix("M-").split("-M-")[-1] for i in keep]
     return RisultatoRSL(os.path.splitext(os.path.basename(path))[0], arr[:, 0], arr[:, 1:].T, nomi)
+
+
+_RX_SL = re.compile(r"(?<![A-Z])(SLO|SLD|SLV|SLC)(?![A-Z])")
+
+
+def stato_limite_di(percorso: str) -> str | None:
+    """Stato limite ricavato dal percorso del file dell'accelerogramma:
+    prima dal nome del file, poi dalle cartelle (dalla più vicina)."""
+    parti = re.split(r"[\\/]", percorso.upper())
+    for parte in reversed(parti):
+        m = _RX_SL.search(parte)
+        if m:
+            return m.group(1)
+    return None
+
+
+def dividi_per_stato_limite(r: RisultatoRSL) -> tuple[dict, list]:
+    """Divide un progetto unico con gli accelerogrammi di più stati limite.
+
+    Ogni accelerogramma è assegnato allo stato limite che compare nel nome del
+    file o di una sua cartella (es. ``...\\SLV\\IT.XXX.ASC`` o ``SLV_1.ASC``).
+    Restituisce {stato_limite: RisultatoRSL} e l'elenco dei file non assegnati.
+    """
+    if len(r.moti) != r.spettri.shape[0]:
+        raise ValueError("Il progetto non permette di associare gli spettri ai file degli "
+                         "accelerogrammi")
+    gruppi, non_assegnati = {}, []
+    for i, m in enumerate(r.moti):
+        sl = stato_limite_di(m.file)
+        if sl is None:
+            non_assegnati.append(m.file or m.nome)
+        else:
+            gruppi.setdefault(sl, []).append(i)
+    out = {}
+    for sl, idx in gruppi.items():
+        out[sl] = RisultatoRSL(f"{r.titolo} {sl}".strip(), r.periodi, r.spettri[idx],
+                               [r.nomi_moti[i] for i in idx], r.smorzamento, r.strati,
+                               r.bedrock, r.tipi, [r.moti[i] for i in idx])
+    return out, non_assegnati
 
 
 def leggi(path: str) -> RisultatoRSL:

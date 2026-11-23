@@ -23,7 +23,13 @@ pip install -r requirements.txt
 python rsl_tools.py
 ```
 
-In Strata, per ogni stato limite: carica gli accelerogrammi, esegui il calcolo con uno
+**Progetto unico.** Si può fare un solo progetto Strata con gli accelerogrammi di tutti
+gli stati limite: RSL Tools li divide in base a `SLO`, `SLD`, `SLV` o `SLC` nel nome del
+file o di una sua cartella (es. `Lavoro\SLV\IT.POFI..HNE.ASC`). Si indica nella riga
+"Tutti gli SL". La "Median" mostrata da Strata in quel caso mescola tutti gli stati limite:
+la media per stato limite la calcola RSL Tools.
+
+**Un progetto per stato limite.** In Strata, per ogni stato limite: carica gli accelerogrammi, esegui il calcolo con uno
 spettro di risposta a piano campagna tra gli output e salva il progetto. In RSL Tools
 indica i quattro progetti, le coordinate, VN e classe d'uso, poi premi
 *Calcola regolarizzazione* o *Genera relazione Word*. Le impostazioni di un lavoro si

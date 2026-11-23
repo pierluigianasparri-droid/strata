@@ -50,7 +50,17 @@ class App(tk.Tk):
         nb.add(f, text="Dati")
         f.columnconfigure(1, weight=1)
         r = 0
-        ttk.Label(f, text="Progetti Strata con i risultati (.json) o spettri esportati (.csv)",
+        ttk.Label(f, text="Progetto Strata unico con tutti gli stati limite (.json)",
+                  font=("", 10, "bold")).grid(row=r, column=0, columnspan=3, sticky="w", pady=(6, 2))
+        r += 1
+        self._riga_file(f, r, "Tutti gli SL", "file_unico",
+                        tipi=[("Strata", "*.json"), ("Tutti", "*.*")])
+        r += 1
+        ttk.Label(f, text="Gli accelerogrammi sono divisi per stato limite in base a SLO/SLD/"
+                  "SLV/SLC nel nome del file o della sua cartella.",
+                  foreground="#555").grid(row=r, column=0, columnspan=3, sticky="w", padx=4)
+        r += 1
+        ttk.Label(f, text="oppure un progetto per stato limite (.json) o spettri esportati (.csv)",
                   font=("", 10, "bold")).grid(row=r, column=0, columnspan=3, sticky="w", pady=(6, 2))
         r += 1
         for sl in SL:
@@ -157,15 +167,24 @@ class App(tk.Tk):
         per = ntc.Reticolo().pericolosita(lat_e, lon_e, vn, cu)
 
         ris, reg = {}, {}
+        unico = self.v["file_unico"].get().strip()
+        if unico:
+            ris, esclusi = strata_io.dividi_per_stato_limite(strata_io.leggi_progetto(unico))
+            for sl in SL:
+                if sl in ris:
+                    self.log(f"{sl}: {len(ris[sl].nomi_moti)} accelerogrammi dal progetto unico")
+            if esclusi:
+                self.log("Accelerogrammi senza stato limite nel percorso (esclusi): "
+                         + ", ".join(os.path.basename(e) for e in esclusi))
         for sl in SL:
             p = self.v[f"file_{sl}"].get().strip()
-            if not p:
-                continue
-            ris[sl] = strata_io.leggi(p)
-            reg[sl] = regolarizza(ris[sl].periodi, ris[sl].media, per[sl].ag,
-                                  ris[sl].smorzamento)
+            if p:
+                ris[sl] = strata_io.leggi(p)
+        ris = {sl: ris[sl] for sl in SL if sl in ris}
+        for sl, r in ris.items():
+            reg[sl] = regolarizza(r.periodi, r.media, per[sl].ag, r.smorzamento)
         if not ris:
-            raise ValueError("Indica almeno un progetto Strata")
+            raise ValueError("Indica il progetto Strata unico o almeno un progetto per stato limite")
         mr = {sl: (self.v[f"dist_{sl}"].get(), self.v[f"mag_{sl}"].get()) for sl in SL}
         return relazione.DatiRelazione(
             vn, classe, cu, lat_w, lon_w, lat_e, lon_e, per, ris, reg, mr,
