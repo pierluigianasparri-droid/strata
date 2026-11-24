@@ -85,6 +85,21 @@ class App(tk.Tk):
         ttk.Label(g, text="Classe d'uso").grid(row=1, column=2, padx=4)
         ttk.Combobox(g, textvariable=self._var("classe", "II"), values=list(ntc.CU_CLASSE),
                      width=6, state="readonly").grid(row=1, column=3, sticky="w")
+        ttk.Label(g, text="Categoria di suolo").grid(row=2, column=0, padx=4, pady=4)
+        ttk.Combobox(g, textvariable=self._var("cat_suolo", "B"), values=ntc.CATEGORIE_SUOLO,
+                     width=6, state="readonly").grid(row=2, column=1, sticky="w")
+        ttk.Label(g, text="Categoria topografica").grid(row=2, column=2, padx=4)
+        ttk.Combobox(g, textvariable=self._var("cat_topo", "T1"), values=list(ntc.ST_CATEGORIA),
+                     width=6, state="readonly").grid(row=2, column=3, sticky="w")
+        ttk.Label(g, text="St").grid(row=2, column=4, padx=4)
+        ttk.Entry(g, textvariable=self._var("st", "1.0"), width=8).grid(row=2, column=5,
+                                                                         sticky="w")
+        self.v["cat_topo"].trace_add(
+            "write", lambda *_: self.v["st"].set(
+                f"{ntc.ST_CATEGORIA.get(self.v['cat_topo'].get(), 1.0):.1f}"))
+        ttk.Label(g, text="(per il capitolo \"Analisi dei risultati\": Ss NTC dalla categoria "
+                  "di suolo, St modificabile per T3/T4 a quota intermedia)",
+                  foreground="#555").grid(row=3, column=0, columnspan=6, sticky="w", padx=4)
         r += 1
 
         ttk.Label(f, text="Coppie distanza-magnitudo (per la tabella della disaggregazione)",
@@ -186,9 +201,11 @@ class App(tk.Tk):
         if not ris:
             raise ValueError("Indica il progetto Strata unico o almeno un progetto per stato limite")
         mr = {sl: (self.v[f"dist_{sl}"].get(), self.v[f"mag_{sl}"].get()) for sl in SL}
+        st = self._num("st", "St")
         return relazione.DatiRelazione(
             vn, classe, cu, lat_w, lon_w, lat_e, lon_e, per, ris, reg, mr,
-            self.v["img_disagg"].get(), self.v["img_rexel"].get(), self._campi())
+            self.v["img_disagg"].get(), self.v["img_rexel"].get(), self._campi(),
+            self.v["cat_suolo"].get(), self.v["cat_topo"].get(), st)
 
     def _stampa(self, d):
         self.log(f"Sito ED50: {d.lat_ed50:.6f}, {d.lon_ed50:.6f}  VN={d.vn:g}  "
@@ -203,6 +220,15 @@ class App(tk.Tk):
                 riga += (f" {g.amax:6.3f} {g.S:5.2f} {g.F0:5.2f} {g.TB:5.2f} {g.TC:5.2f} "
                          f"{g.TD:5.2f}  {len(d.risultati[sl].nomi_moti)}")
             self.log(riga)
+        self.log("")
+        self.log(f"Categoria di suolo {d.categoria_suolo}, categoria topografica "
+                 f"{d.categoria_topografica} (St = {d.st:g})")
+        for sl in ("SLV", "SLD"):
+            if sl in d.regolarizzati:
+                v = relazione.valori_confronto(d, sl)
+                self.log(f"{sl}: AMAX NTC = {v['ag']:.3f} x {v['ss_ntc']:.2f} x {v['st']:.2f} = "
+                         f"{v['amax_ntc']:.3f}   AMAX RSL = {v['ag']:.3f} x {v['ss_rsl']:.2f} x "
+                         f"{v['st']:.2f} = {v['amax_rsl']:.3f}")
         self.log("")
 
     def calcola(self):

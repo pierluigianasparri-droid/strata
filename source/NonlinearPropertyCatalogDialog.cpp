@@ -28,6 +28,11 @@
 #include "NonlinearPropertyFactoryGroupBox.h"
 
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QMessageBox>
+#include <QSettings>
 #include <QGridLayout>
 #include <QLabel>
 #include <QTableView>
@@ -36,7 +41,7 @@
 
 NonlinearPropertyCatalogDialog::NonlinearPropertyCatalogDialog(
     NonlinearPropertyCatalog *catalog, QWidget *parent, Qt::WindowFlags f)
-    : QDialog(parent, f) {
+    : QDialog(parent, f), _catalog(catalog) {
   auto *layout = new QGridLayout;
 
   // Shear modulus list
@@ -77,6 +82,22 @@ NonlinearPropertyCatalogDialog::NonlinearPropertyCatalogDialog(
   connect(buttonBox, &QDialogButtonBox::accepted, this,
           &NonlinearPropertyCatalogDialog::accept);
 
+  auto *exportButton =
+      buttonBox->addButton(tr("Export curves..."), QDialogButtonBox::ActionRole);
+  exportButton->setToolTip(
+      tr("Save the user defined curves to a file, to be imported in another "
+         "installation of Strata."));
+  connect(exportButton, &QPushButton::clicked, this,
+          &NonlinearPropertyCatalogDialog::exportCurves);
+
+  auto *importButton =
+      buttonBox->addButton(tr("Import curves..."), QDialogButtonBox::ActionRole);
+  importButton->setToolTip(
+      tr("Add the curves saved in a file. Curves with an existing name are "
+         "skipped."));
+  connect(importButton, &QPushButton::clicked, this,
+          &NonlinearPropertyCatalogDialog::importCurves);
+
   layout->addWidget(buttonBox, 2, 1);
 
   setLayout(layout);
@@ -90,4 +111,60 @@ void NonlinearPropertyCatalogDialog::setDataModel(NonlinearProperty *np,
                                                   bool readOnly) {
   _dataGroupBox->setModel(np);
   _dataGroupBox->setReadOnly(readOnly);
+}
+
+void NonlinearPropertyCatalogDialog::exportCurves() {
+  QSettings settings;
+  QString fileName = QFileDialog::getSaveFileName(
+      this, tr("Export curves - Strata"),
+      settings.value("nlCurvesDir", QDir::homePath()).toString() +
+          "/strata-curves.json",
+      tr("Strata curves (*.json)"));
+  if (fileName.isEmpty())
+    return;
+
+  if (!fileName.endsWith(".json", Qt::CaseInsensitive))
+    fileName += ".json";
+  settings.setValue("nlCurvesDir", QFileInfo(fileName).absolutePath());
+
+  // Save the current state first
+  _catalog->save();
+
+  QString error;
+  if (_catalog->exportCurves(fileName, &error)) {
+    QMessageBox::information(
+        this, tr("Export curves - Strata"),
+        tr("User defined curves saved to:\n%1").arg(fileName));
+  } else {
+    QMessageBox::warning(this, tr("Export curves - Strata"),
+                         tr("Unable to save the file:\n%1").arg(error));
+  }
+}
+
+void NonlinearPropertyCatalogDialog::importCurves() {
+  QSettings settings;
+  const QString fileName = QFileDialog::getOpenFileName(
+      this, tr("Import curves - Strata"),
+      settings.value("nlCurvesDir", QDir::homePath()).toString(),
+      tr("Strata curves (*.json);;Strata curve database (nonlinearCurves*);;"
+         "All files (*)"));
+  if (fileName.isEmpty())
+    return;
+
+  settings.setValue("nlCurvesDir", QFileInfo(fileName).absolutePath());
+
+  int nm = 0;
+  int nd = 0;
+  QString error;
+  if (_catalog->importCurves(fileName, &nm, &nd, &error)) {
+    QMessageBox::information(
+        this, tr("Import curves - Strata"),
+        tr("Imported %1 shear modulus reduction curve(s) and %2 damping "
+           "curve(s).\nCurves with a name already present were skipped.")
+            .arg(nm)
+            .arg(nd));
+  } else {
+    QMessageBox::warning(this, tr("Import curves - Strata"),
+                         tr("Unable to import the file:\n%1").arg(error));
+  }
 }

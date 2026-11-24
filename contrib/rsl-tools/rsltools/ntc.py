@@ -105,3 +105,24 @@ class Reticolo:
             p = self.parametri(lat_ed50, lon_ed50, tr)
             res[sl] = Pericolosita(sl, tr, p["ag"], p["F0"], p["Tc"], p["nodi"])
         return res
+
+
+# --------------------------------------------------------------------------- NTC 2018 §3.2.3.2.1
+
+#: Coefficiente di amplificazione topografica St (NTC 2018 Tab. 3.2.V, valore
+#: massimo: per T3 e T4 vale in cresta e si riduce linearmente fino a 1 alla base)
+ST_CATEGORIA = {"T1": 1.0, "T2": 1.2, "T3": 1.2, "T4": 1.4}
+
+#: Ss = a - b·F0·ag/g limitato tra min e max (NTC 2018 Tab. 3.2.IV)
+_SS = {"A": None, "B": (1.40, 0.40, 1.00, 1.20), "C": (1.70, 0.60, 1.00, 1.50),
+       "D": (2.40, 1.50, 0.90, 1.80), "E": (2.00, 1.10, 1.00, 1.60)}
+CATEGORIE_SUOLO = list(_SS)
+
+
+def coefficiente_ss(categoria: str, ag: float, f0: float) -> float:
+    """Coefficiente di amplificazione stratigrafica Ss delle NTC 2018."""
+    c = _SS[categoria.upper()]
+    if c is None:
+        return 1.0
+    a, b, lo, hi = c
+    return min(max(a - b * f0 * ag, lo), hi)

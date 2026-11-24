@@ -56,7 +56,13 @@ fissi e figure restano come sono.
 | `{{FIGURE_ACCELEROGRAMMI}}` | immagini della cartella "REXELite" |
 | `{{TABELLA_ACCELEROGRAMMI}}` | elenco accelerogrammi con PGA |
 | `{{RISULTATI_RSL}}` | per ogni SL: tabella degli spettri, grafico, spettro medio |
-| `{{REGOLARIZZAZIONE}}` | metodo, punti, parametri e grafico per ogni SL |
+| `{{REGOLARIZZAZIONE}}` | metodo, punti, parametri (con legenda) e grafico per ogni SL |
+| `{{ANALISI_RISULTATI}}` | riepilogo finale: confronto NTC 2018 / RSL per SLV e SLD (ag, Ss, St, AMAX) con note |
+
+Per il capitolo finale si indicano nel programma la categoria di suolo (A–E, per Ss
+secondo NTC 2018 Tab. 3.2.IV) e la categoria topografica (T1–T4); St si compila da solo
+(1,0 / 1,2 / 1,2 / 1,4) ma si può correggere, per esempio per T3/T4 a quota intermedia.
+L'AMAX della RSL è Amax dello spettro regolarizzato (= ag·S) moltiplicato per St.
 
 Nelle cartelle di immagini, i file il cui nome contiene `SLO`, `SLD`, `SLV` o `SLC`
 vengono raggruppati sotto lo stato limite corrispondente, in ordine alfabetico.
@@ -65,7 +71,8 @@ vengono raggruppati sotto lo stato limite corrispondente, in ordine alfabetico.
 `{{TR_SLO}}`…`{{TR_SLC}}`, `{{AG_SLO}}`…, `{{AMAX_SLV}}`, `{{S_SLV}}`, `{{F0_SLV}}`,
 `{{TB_SLV}}`, `{{TC_SLV}}`, `{{TD_SLV}}` (e così per ogni SL), `{{LAT_WGS84}}`,
 `{{LON_WGS84}}`, `{{LAT_ED50}}`, `{{LON_ED50}}`, `{{PROF_BEDROCK}}`, `{{VS_BEDROCK}}`,
-`{{SMORZAMENTO}}`, `{{DATA}}`, più qualsiasi campo libero inserito nel programma
+`{{SMORZAMENTO}}`, `{{DATA}}`, `{{CAT_SUOLO}}`, `{{CAT_TOPOGRAFICA}}`, `{{ST}}`,
+`{{SS_NTC_SLV}}`, `{{AMAX_NTC_SLV}}`, `{{AMAX_RSL_SLV}}` (e così per ogni SL), più qualsiasi campo libero inserito nel programma
 (`OGGETTO = ...` diventa `{{OGGETTO}}`).
 
 Senza modello il programma usa una struttura di base con tutti i blocchi.

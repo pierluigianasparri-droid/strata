@@ -23,10 +23,12 @@ import numpy as np
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Cm, Pt
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Cm, Pt, RGBColor
 
 from . import grafici
-from .ntc import STATI_LIMITE, Pericolosita
+from .ntc import STATI_LIMITE, Pericolosita, coefficiente_ss
 from .regolarizzazione import SpettroRegolarizzato, spettro_ntc_suolo_a
 from .strata_io import RisultatoRSL
 
@@ -43,11 +45,15 @@ SEGNAPOSTO_BLOCCHI = {
     "TABELLA_ACCELEROGRAMMI": "Elenco degli accelerogrammi per stato limite",
     "RISULTATI_RSL": "Tabelle e grafici degli spettri per stato limite",
     "REGOLARIZZAZIONE": "Regolarizzazione: metodo, punti, parametri e grafici",
+    "ANALISI_RISULTATI": "Riepilogo finale: confronto NTC 2018 / RSL per SLV e SLD (ag, Ss, "
+                         "St, AMAX)",
 }
 SEGNAPOSTO_TESTO = [
     "VN", "CLASSE_USO", "CU", "TR_SLO", "TR_SLD", "TR_SLV", "TR_SLC",
     "AG_SLO", "AG_SLD", "AG_SLV", "AG_SLC", "LAT_WGS84", "LON_WGS84",
     "LAT_ED50", "LON_ED50", "PROF_BEDROCK", "VS_BEDROCK", "SMORZAMENTO", "DATA",
+    "CAT_SUOLO", "CAT_TOPOGRAFICA", "ST", "SS_NTC_SLV", "AMAX_NTC_SLV", "AMAX_RSL_SLV",
+    "(e gli stessi per SLO, SLD, SLC)",
     "+ tutti i campi liberi inseriti nel programma (es. COMMITTENTE, COMUNE)",
 ]
 
@@ -70,6 +76,9 @@ class DatiRelazione:
     cartella_disaggregazione: str = ""
     cartella_accelerogrammi: str = ""
     campi: dict = field(default_factory=dict)
+    categoria_suolo: str = "B"
+    categoria_topografica: str = "T1"
+    st: float = 1.0
 
 
 # --------------------------------------------------------------------------- utilità docx
@@ -323,13 +332,16 @@ def _blocco(nome, ins: _Inseritore, d: DatiRelazione):
             ins.tabella(["Amax", "S", "F0", "TB [sec]", "TC [sec]", "TD [sec]"],
                         [[_f(reg.amax), _f(reg.S, 2), _f(reg.F0, 2), _f(reg.TB, 2),
                           _f(reg.TC, 2), _f(reg.TD, 2)]])
+            _legenda(ins)
             p = d.pericolosita[sl]
             png = ins.nuovo_png(f"regolarizzato_{sl}")
             grafici.regolarizzazione(png, sl, r.periodi, r.media, reg, r.periodi,
                                      spettro_ntc_suolo_a(p.ag, p.f0, p.tc_star, r.periodi,
                                                          r.smorzamento))
             ins.immagine(png)
-        _legenda(ins)
+
+    elif nome == "ANALISI_RISULTATI":
+        _analisi_risultati(ins, d)
 
 
 def _testo_metodo(ins):
@@ -352,16 +364,111 @@ def _testo_metodo(ins):
             "delle simulazioni e con lo spettro NTC 2018 su suolo di riferimento A.")
 
 
+LEGENDA = [
+    ("Amax", "punto di ancoraggio a T=0 dello spettro di output;"),
+    ("S", "coefficiente che tiene conto degli effetti di amplificazione (strat. e/o "
+          "topografici);"),
+    ("F0", "valore massimo dello spettro in accelerazione orizzontale;"),
+    ("TB", "periodo corrispondente all'inizio del tratto dello spettro ad accelerazione "
+           "costante;"),
+    ("Tc", "periodo corrispondente all'inizio del tratto dello spettro a velocità costante;"),
+    ("TD", "periodo corrispondente all'inizio del tratto dello spettro a spostamento costante."),
+]
+
+
 def _legenda(ins):
     ins.par("dove:")
-    for t in ("Amax: punto di ancoraggio a T = 0 dello spettro di output;",
-              "S: coefficiente che tiene conto degli effetti di amplificazione (stratigrafici "
-              "e/o topografici);",
-              "F0: fattore che quantifica l'amplificazione spettrale massima;",
-              "TB: periodo di inizio del tratto ad accelerazione costante;",
-              "TC: periodo di inizio del tratto a velocità costante;",
-              "TD: periodo di inizio del tratto a spostamento costante."):
-        ins.par("- " + t)
+    for k, t in LEGENDA:
+        p = ins.par(f"{k}\t: {t}")
+        p.paragraph_format.tab_stops.add_tab_stop(Cm(1.25))
+        p.paragraph_format.space_after = Pt(0)
+    ins.par()
+
+
+def _virgola(x, n):
+    return f"{x:.{n}f}".replace(".", ",")
+
+
+def _ombreggia(cella, colore):
+    tcPr = cella._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), colore)
+    tcPr.append(shd)
+
+
+def valori_confronto(d: DatiRelazione, sl: str) -> dict:
+    """ag, Ss e AMAX secondo NTC 2018 (categoria di suolo) e secondo la RSL."""
+    p = d.pericolosita[sl]
+    reg = d.regolarizzati[sl]
+    ss_ntc = coefficiente_ss(d.categoria_suolo, p.ag, p.f0)
+    return {"ag": p.ag, "ss_ntc": ss_ntc, "amax_ntc": p.ag * ss_ntc * d.st,
+            "ss_rsl": reg.S, "amax_rsl": reg.amax * d.st, "st": d.st}
+
+
+def _analisi_risultati(ins, d: DatiRelazione):
+    st = _virgola(d.st, 1)
+    p = ins.par("Prima di fornire il riepilogo dei risultati, si ricorda che l'elaborazione "
+                "della Risposta Sismica Locale eseguita è 1D e pertanto ")
+    if d.st > 1.0:
+        r = p.add_run(f"vista la categoria topografica {d.categoria_topografica} tutti i "
+                      "coefficienti sismici riportati nel capitolo precedente ovvero F0, Tb, Tc "
+                      f"(non solo l'Amax) dovranno essere moltiplicati per il coefficiente {st}.")
+    else:
+        r = p.add_run(f"vista la categoria topografica {d.categoria_topografica} (St = {st}) i "
+                      "coefficienti sismici riportati nel capitolo precedente (Amax, F0, Tb, Tc) "
+                      "non devono essere ulteriormente amplificati.")
+    r.bold = True
+    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    ins.par()
+
+    for sl in ("SLV", "SLD"):
+        if sl not in d.regolarizzati:
+            continue
+        v = valori_confronto(d, sl)
+        t_p = ins.par()
+        r = t_p.add_run(f"Confronto NTC 2018 ed Analisi RSL 1D per {sl}")
+        r.bold = True
+        r.underline = True
+        t = ins.tabella(["", "ag(g) di base", "coeff. Ss", "coeff. St", "AMAX"], [
+            ["NTC2018", _virgola(v["ag"], 3), _virgola(v["ss_ntc"], 2) + "*",
+             _virgola(v["st"], 2) + " **", _virgola(v["amax_ntc"], 3)],
+            ["RSL", _virgola(v["ag"], 3), _virgola(v["ss_rsl"], 2) + " ***",
+             _virgola(v["st"], 2) + " **",
+             _virgola(v["amax_rsl"], 3) + ("****" if sl == "SLV" else "")],
+        ], dimensione=10, larghezze=[3, 3, 3, 3, 3])
+        for row in t.rows:
+            for c in row.cells:
+                for par in c.paragraphs:
+                    for run in par.runs:
+                        run.bold = False
+        for c in t.rows[1].cells[:1] + t.rows[2].cells[:1]:
+            c.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for c in t.rows[2].cells:
+            _ombreggia(c, "FFFF00")
+        if sl == "SLV":
+            r = t.rows[2].cells[4].paragraphs[0].runs[-1]
+            r.bold = True
+            r.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
+
+    note = [
+        (f"* categoria di suolo \"{d.categoria_suolo}\" ricavata attraverso indagini in sito "
+         "NTC2018", False),
+        (f"** categoria topografica {d.categoria_topografica} dovuta alla morfologia - NTC2018",
+         False),
+        ("*** valore di Ss ricavato dalla RSL 1D in SLV o SLD", False),
+        ("**** Valore da considerare ai fini degli incrementi dovuti all'amplificazione sismica",
+         True),
+    ]
+    for testo, rosso in note:
+        p = ins.par()
+        r = p.add_run(testo)
+        r.italic = True
+        if rosso:
+            r.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
+        p.paragraph_format.space_after = Pt(2)
+    ins.par()
 
 
 # --------------------------------------------------------------------------- modello di base
@@ -381,6 +488,7 @@ def _modello_base():
         ("Accelerogrammi di input", ["{{FIGURE_ACCELEROGRAMMI}}", "{{TABELLA_ACCELEROGRAMMI}}"]),
         ("Risultati della risposta sismica locale", ["{{RISULTATI_RSL}}"]),
         ("Regolarizzazione dello spettro di risposta", ["{{REGOLARIZZAZIONE}}"]),
+        ("Analisi dei risultati", ["{{ANALISI_RISULTATI}}"]),
     ]
     for titolo, pars in sezioni:
         doc.add_heading(titolo, 1)
@@ -408,6 +516,14 @@ def genera(d: DatiRelazione, uscita: str, modello: str | None = None, log=print)
     for sl, reg in d.regolarizzati.items():
         for k in ("amax", "S", "F0", "TB", "TC", "TD"):
             valori[f"{k.upper()}_{sl}"] = _f(getattr(reg, k), 3 if k == "amax" else 2)
+    valori["CAT_SUOLO"] = d.categoria_suolo
+    valori["CAT_TOPOGRAFICA"] = d.categoria_topografica
+    valori["ST"] = _virgola(d.st, 1)
+    for sl in d.regolarizzati:
+        v = valori_confronto(d, sl)
+        valori[f"SS_NTC_{sl}"] = _virgola(v["ss_ntc"], 2)
+        valori[f"AMAX_NTC_{sl}"] = _virgola(v["amax_ntc"], 3)
+        valori[f"AMAX_RSL_{sl}"] = _virgola(v["amax_rsl"], 3)
     primo = next(iter(d.risultati.values()), None)
     if primo and primo.bedrock:
         valori["PROF_BEDROCK"] = f"{primo.bedrock.profondita:g}"

@@ -26,6 +26,7 @@
 
 #include <QAbstractListModel>
 #include <QDataStream>
+#include <QJsonArray>
 #include <QJsonObject>
 
 class AbstractNonlinearPropertyFactory : public QAbstractListModel {
@@ -69,6 +70,16 @@ public:
 
   void fromJson(const QJsonObject &json);
   auto toJson() const -> QJsonObject;
+
+  //! Add read-only (built-in) models from a JSON array
+  void addBuiltinModels(const QJsonArray &models);
+
+  //! Add user models from a JSON object (as written by toJson()). Models whose
+  //! name already exists are skipped. Returns the number of models added.
+  auto importModels(const QJsonObject &json) -> int;
+
+  //! True if a model with this name exists
+  auto hasModel(const QString &name) const -> bool;
 
 protected:
   //! Type of models the factor produces

@@ -39,7 +39,20 @@ public:
   //! Save the defined curves
   auto save() const -> bool;
 
+  //! Export the user defined curves to a JSON file
+  auto exportCurves(const QString &fileName, QString *error = nullptr) const
+      -> bool;
+
+  //! Import user defined curves from a JSON file (or a Strata curve database
+  //! file). Curves with a name that already exists are skipped.
+  auto importCurves(const QString &fileName, int *modulusCount = nullptr,
+                    int *dampingCount = nullptr, QString *error = nullptr)
+      -> bool;
+
 protected:
+  //! Load the curves distributed with the program (resources)
+  void loadBuiltinCurves();
+
   ModulusFactory *_modulusFactory;
   DampingFactory *_dampingFactory;
 

@@ -53,3 +53,18 @@ def test_csv(tmp_path):
     r = strata_io.leggi_csv(str(p))
     assert r.nomi_moti == ["a", "b"]
     assert np.allclose(r.media, 0.2)  # media geometrica di 0.1 e 0.4
+
+
+def test_coefficiente_ss_ntc():
+    from rsltools import ntc
+    assert ntc.coefficiente_ss("A", 0.3, 2.5) == 1.0
+    assert abs(ntc.coefficiente_ss("B", 0.178, 2.4) - 1.20) < 1e-9  # limite superiore
+    assert abs(ntc.coefficiente_ss("C", 0.25, 2.5) - (1.70 - 0.60 * 2.5 * 0.25)) < 1e-9
+    assert ntc.coefficiente_ss("D", 0.5, 2.6) == 0.90  # limite inferiore
+    assert ntc.ST_CATEGORIA["T2"] == 1.2
+
+
+def test_legenda_testo_utente():
+    from rsltools import relazione
+    nomi = [k for k, _ in relazione.LEGENDA]
+    assert nomi == ["Amax", "S", "F0", "TB", "Tc", "TD"]

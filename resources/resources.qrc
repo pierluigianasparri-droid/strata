@@ -46,5 +46,6 @@
         <file>data/cena_bt15_trms4osc.json</file>
         <file>data/wna_bt12_trms4osc.json</file>
         <file>data/wna_bt15_trms4osc.json</file>
+        <file>data/curve_gd_marche3.json</file>
     </qresource>
 </RCC>

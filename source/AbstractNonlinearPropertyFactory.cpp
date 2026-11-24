@@ -240,3 +240,68 @@ auto operator>>(QDataStream &in, AbstractNonlinearPropertyFactory &anpf)
 
   return in;
 }
+
+void AbstractNonlinearPropertyFactory::addBuiltinModels(
+    const QJsonArray &models) {
+  for (const QJsonValue &v : models) {
+    const QJsonObject obj = v.toObject();
+    if (obj["name"].toString().isEmpty() || hasModel(obj["name"].toString()))
+      continue;
+
+    auto *np = new NonlinearProperty(this);
+    np->fromJson(obj);
+    // Make sure the type matches the factory
+    if (np->type() != _type) {
+      delete np;
+      continue;
+    }
+    _models << np;
+  }
+}
+
+auto AbstractNonlinearPropertyFactory::importModels(const QJsonObject &json)
+    -> int {
+  const QJsonArray models = json["models"].toArray();
+  QList<NonlinearProperty *> added;
+  for (const QJsonValue &v : models) {
+    const QJsonObject obj = v.toObject();
+    const QString name = obj["name"].toString();
+    if (name.isEmpty() || hasModel(name))
+      continue;
+
+    bool dup = false;
+    for (auto *np : added) {
+      if (np->name() == name) {
+        dup = true;
+        break;
+      }
+    }
+    if (dup)
+      continue;
+
+    auto *np = new CustomNonlinearProperty(_type, true);
+    np->fromJson(obj);
+    if (np->strain().size() < 2) {
+      delete np;
+      continue;
+    }
+    added << np;
+  }
+
+  if (!added.isEmpty()) {
+    beginInsertRows(QModelIndex(), _models.size(),
+                    _models.size() + added.size() - 1);
+    _models << added;
+    endInsertRows();
+  }
+  return added.size();
+}
+
+auto AbstractNonlinearPropertyFactory::hasModel(const QString &name) const
+    -> bool {
+  for (auto *np : _models) {
+    if (np->name() == name)
+      return true;
+  }
+  return false;
+}

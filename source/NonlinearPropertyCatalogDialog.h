@@ -42,8 +42,12 @@ public:
 
 protected slots:
   void setDataModel(NonlinearProperty *np, bool readOnly);
+  void exportCurves();
+  void importCurves();
 
 protected:
+  NonlinearPropertyCatalog *_catalog;
+
   //! Table showing the current model
   TableGroupBox *_dataGroupBox;
 };
