@@ -462,9 +462,10 @@ auto operator>>(QDataStream &in, MotionLibrary *ml) -> QDataStream & {
       if (m->accel().size()) {
         ml->_motions << m;
       } else {
+        // The motion file could not be read: skip the motion. All of the
+        // saved entries must still be read to keep the stream aligned.
+        qWarning() << "Unable to load motion:" << m->fileName();
         m->deleteLater();
-        // Need to reduce the size of motions to load so we know when to stop
-        --size;
       }
     } else if (className == "RvtMotion") {
       auto *m = new RvtMotion(ml);

@@ -410,6 +410,11 @@ auto SiteResponseModel::loadBinary(const QString &fileName) -> bool {
   // Read the data
   inStream >> this;
 
+  if (inStream.status() != QDataStream::Ok) {
+    qCritical() << "Unable to read the binary file:" << fileName;
+    return false;
+  }
+
   setModified(false);
   // Wait until all events have been processed and then reset the modified flag
   // QTimer::singleShot(10, this, SLOT(setIsLoaded()));

@@ -310,7 +310,9 @@ auto SoilType::toJson() const -> QJsonObject {
 }
 
 auto operator<<(QDataStream &out, const SoilType *st) -> QDataStream & {
-  out << static_cast<quint8>(2);
+  // Version 3: minDamping removed. Version 2 files (all the binary projects
+  // written by the previous Strata releases) still contain it.
+  out << static_cast<quint8>(3);
 
   out << st->_untWt << st->_damping << st->_name << st->_notes << st->_isVaried
       << st->_saveData << st->_meanStress << st->_pi << st->_ocr << st->_freq
@@ -341,7 +343,13 @@ auto operator>>(QDataStream &in, SoilType *st) -> QDataStream & {
 
     NonlinearProperty *np = st->deriveModel(type, className);
 
-    Q_ASSERT(np);
+    if (!np) {
+      // Unknown model: the file is corrupt or from an unsupported version.
+      // Stop here instead of crashing.
+      qCritical() << "Unknown nonlinear property model:" << className;
+      in.setStatus(QDataStream::ReadCorruptData);
+      return in;
+    }
     in >> np;
 
     if (i == 0) {
@@ -351,8 +359,9 @@ auto operator>>(QDataStream &in, SoilType *st) -> QDataStream & {
     }
   }
 
-  if (ver < 2) {
-    // minDamping no longer used, consume for backward compatibility
+  if (ver == 2) {
+    // minDamping (added in version 2, removed in version 3) is no longer
+    // used: consume it for backward compatibility
     double unused;
     in >> unused;
   }

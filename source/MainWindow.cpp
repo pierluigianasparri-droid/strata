@@ -325,12 +325,24 @@ void MainWindow::open(QString fileName) {
   _settings->setValue("projectDirectory", QFileInfo(fileName).filePath());
 
   auto *srm = new SiteResponseModel;
+  bool loaded = false;
   if (fileName.endsWith(".strata")) {
-    srm->loadBinary(fileName);
+    loaded = srm->loadBinary(fileName);
   } else if (fileName.endsWith(".json")) {
-    srm->loadJson(fileName);
+    loaded = srm->loadJson(fileName);
   } else {
+    srm->deleteLater();
     return showExtensionError(this);
+  }
+
+  if (!loaded) {
+    srm->deleteLater();
+    QMessageBox::warning(
+        this, tr("Open file - Strata"),
+        tr("Unable to read the project:\n%1\n\nThe file may be damaged or "
+           "saved with an unsupported version of Strata.")
+            .arg(fileName));
+    return;
   }
 
   setModel(srm);
