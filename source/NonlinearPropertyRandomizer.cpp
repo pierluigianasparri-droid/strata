@@ -26,7 +26,10 @@
 #include "SoilProfile.h"
 #include "SoilType.h"
 
+#include <QByteArray>
+#include <QDataStream>
 #include <QDebug>
+#include <QIODevice>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -173,6 +176,50 @@ auto NonlinearPropertyRandomizer::toJson() const -> QJsonObject {
   return json;
 }
 
+namespace {
+// Check whether the bytes that follow look like a valid record in the given
+// layout: enabled (int or bool), model (qint32), bedrockIsEnabled (bool),
+// correlation (double), then the version byte of the modulus uncertainty.
+auto looksValid(const QByteArray &b, int enabledSize) -> bool {
+  const int n = enabledSize + 4 + 1 + 8 + 1;
+  if (b.size() < n)
+    return false;
+
+  auto u8 = [&](int i) { return static_cast<quint8>(b.at(i)); };
+  // Enabled: 0 or 1 (big endian when stored as int)
+  for (int i = 0; i < enabledSize - 1; ++i)
+    if (u8(i) != 0)
+      return false;
+  if (u8(enabledSize - 1) > 1)
+    return false;
+  // Model: SPID or Darendeli
+  int p = enabledSize;
+  if (u8(p) || u8(p + 1) || u8(p + 2) || u8(p + 3) > 1)
+    return false;
+  p += 4;
+  // Bedrock is enabled
+  if (u8(p) > 1)
+    return false;
+  p += 1;
+  // Correlation
+  QDataStream ds(b.mid(p, 8));
+  double c;
+  ds >> c;
+  if (!std::isfinite(c) || std::fabs(c) > 1. || (c != 0 && std::fabs(c) < 1e-6))
+    return false;
+  p += 8;
+  // Version of the NonlinearPropertyUncertainty that follows
+  return u8(p) >= 1 && u8(p) <= 5;
+}
+
+auto oldIntEnabledLayout(QDataStream &in) -> bool {
+  if (!in.device())
+    return false;
+  const QByteArray b = in.device()->peek(32);
+  return looksValid(b, 4) && !looksValid(b, 1);
+}
+} // namespace
+
 auto operator<<(QDataStream &out, const NonlinearPropertyRandomizer *npv)
     -> QDataStream & {
   out << (quint8)2;
@@ -190,7 +237,14 @@ auto operator>>(QDataStream &in, NonlinearPropertyRandomizer *npv)
 
   qint32 model;
 
-  in >> npv->_enabled >> model >> npv->_bedrockIsEnabled >> npv->_correl;
+  if (oldIntEnabledLayout(in)) {
+    // Strata releases built before April 2022 stored _enabled as an int
+    qint32 enabled;
+    in >> enabled >> model >> npv->_bedrockIsEnabled >> npv->_correl;
+    npv->_enabled = enabled != 0;
+  } else {
+    in >> npv->_enabled >> model >> npv->_bedrockIsEnabled >> npv->_correl;
+  }
 
   if (ver < 2) {
     // Read information previously stored in the
