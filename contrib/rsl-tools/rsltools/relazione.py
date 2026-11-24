@@ -500,6 +500,11 @@ def applica_font(doc, nome: str = "", dimensione: float | None = None):
         # proprio lo ereditano da questi)
         for rpr in doc.styles.element.iter(qn("w:rPr")):
             _imposta_rfonts(rpr, nome)
+        normale = _stile(doc, "Normal", "Normale")
+        if normale is not None:
+            st = doc.styles[normale]
+            st.font.name = nome
+            _imposta_rfonts(st.element.get_or_add_rPr(), nome)
         parti = [doc.element.body]
         for sez in doc.sections:
             for hf in (sez.header, sez.footer, sez.first_page_header, sez.first_page_footer,
