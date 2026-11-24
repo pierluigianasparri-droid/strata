@@ -79,6 +79,8 @@ class DatiRelazione:
     categoria_suolo: str = "B"
     categoria_topografica: str = "T1"
     st: float = 1.0
+    carattere: str = ""  # font di tutta la relazione ("" = come nel modello)
+    dimensione: float | None = None  # dimensione del testo normale in pt
 
 
 # --------------------------------------------------------------------------- utilità docx
@@ -471,6 +473,60 @@ def _analisi_risultati(ins, d: DatiRelazione):
     ins.par()
 
 
+# --------------------------------------------------------------------------- font
+
+_ATTR_FONT = ("ascii", "hAnsi", "cs", "eastAsia")
+_ATTR_TEMA = ("asciiTheme", "hAnsiTheme", "cstheme", "eastAsiaTheme")
+
+
+def _imposta_rfonts(rpr, nome):
+    rf = rpr.find(qn("w:rFonts"))
+    if rf is None:
+        rf = OxmlElement("w:rFonts")
+        rpr.insert(0, rf)
+    for a in _ATTR_TEMA:
+        rf.attrib.pop(qn(f"w:{a}"), None)
+    for a in _ATTR_FONT:
+        rf.set(qn(f"w:{a}"), nome)
+
+
+def applica_font(doc, nome: str = "", dimensione: float | None = None):
+    """Usa il carattere ``nome`` in tutta la relazione: stili, testo del
+    modello con formattazione diretta, tabelle, intestazioni e piè di pagina.
+    ``dimensione`` (pt) cambia il testo normale; titoli e tabelle mantengono
+    le proprie dimensioni."""
+    if nome:
+        # stili e valori predefiniti del documento (gli stili senza carattere
+        # proprio lo ereditano da questi)
+        for rpr in doc.styles.element.iter(qn("w:rPr")):
+            _imposta_rfonts(rpr, nome)
+        parti = [doc.element.body]
+        for sez in doc.sections:
+            for hf in (sez.header, sez.footer, sez.first_page_header, sez.first_page_footer,
+                       sez.even_page_header, sez.even_page_footer):
+                if hf is not None and not hf.is_linked_to_previous:
+                    parti.append(hf._element)
+        for parte in parti:
+            for rpr in parte.iter(qn("w:rPr")):
+                if rpr.find(qn("w:rFonts")) is not None:
+                    _imposta_rfonts(rpr, nome)
+        # numeri degli elenchi (i simboli dei punti elenco restano invariati)
+        try:
+            numerazione = doc.part.numbering_part.element
+        except (KeyError, NotImplementedError, AttributeError):
+            numerazione = None
+        if numerazione is not None:
+            simboli = {"Symbol", "Wingdings", "Courier New", "OpenSymbol", "StarSymbol"}
+            for rf in numerazione.iter(qn("w:rFonts")):
+                if rf.get(qn("w:ascii")) not in simboli and (
+                        rf.get(qn("w:ascii")) or rf.get(qn("w:cs"))):
+                    _imposta_rfonts(rf.getparent(), nome)
+    if dimensione:
+        normale = _stile(doc, "Normal", "Normale")
+        if normale is not None:
+            doc.styles[normale].font.size = Pt(dimensione)
+
+
 # --------------------------------------------------------------------------- modello di base
 
 def _modello_base():
@@ -556,5 +612,9 @@ def genera(d: DatiRelazione, uscita: str, modello: str | None = None, log=print)
             _sostituisci_testo(p, valori)
         if mancanti:
             log("Segnaposto senza valore: " + ", ".join(sorted(mancanti)))
+        if d.carattere or d.dimensione:
+            applica_font(doc, d.carattere, d.dimensione)
+            log(f"Carattere della relazione: {d.carattere or 'come nel modello'}"
+                + (f", {d.dimensione:g} pt" if d.dimensione else ""))
         doc.save(uscita)
     return uscita

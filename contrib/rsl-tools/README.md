@@ -75,6 +75,11 @@ vengono raggruppati sotto lo stato limite corrispondente, in ordine alfabetico.
 `{{SS_NTC_SLV}}`, `{{AMAX_NTC_SLV}}`, `{{AMAX_RSL_SLV}}` (e così per ogni SL), più qualsiasi campo libero inserito nel programma
 (`OGGETTO = ...` diventa `{{OGGETTO}}`).
 
+**Carattere**: nella sezione Relazione si può scegliere il font (e la dimensione del
+testo normale) di tutta la relazione, comprese le parti generate. Lasciando vuoto si
+usano i caratteri del modello Word: in quel caso basta cambiare lo stile "Normale"
+del modello.
+
 Senza modello il programma usa una struttura di base con tutti i blocchi.
 
 ## Dati

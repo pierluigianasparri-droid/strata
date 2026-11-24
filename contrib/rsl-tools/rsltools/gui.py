@@ -121,6 +121,21 @@ class App(tk.Tk):
         r += 1
         self._riga_file(f, r, "Modello Word", "modello", tipi=[("Word", "*.docx")])
         r += 1
+        g = ttk.Frame(f)
+        g.grid(row=r, column=0, columnspan=3, sticky="w")
+        ttk.Label(g, text="Carattere").grid(row=0, column=0, padx=4, sticky="w")
+        try:
+            from tkinter import font as tkfont
+            famiglie = sorted({x for x in tkfont.families(self) if not x.startswith("@")})
+        except Exception:  # noqa: BLE001
+            famiglie = []
+        ttk.Combobox(g, textvariable=self._var("carattere", ""),
+                     values=["", *famiglie], width=28).grid(row=0, column=1, sticky="w")
+        ttk.Label(g, text="Dimensione testo (pt)").grid(row=0, column=2, padx=(12, 4))
+        ttk.Entry(g, textvariable=self._var("dimensione", ""), width=6).grid(row=0, column=3)
+        ttk.Label(g, text="(vuoto = come nel modello Word)", foreground="#555").grid(
+            row=0, column=4, padx=6)
+        r += 1
         self._riga_file(f, r, "Immagini disaggregazione", "img_disagg", cartella=True)
         r += 1
         self._riga_file(f, r, "Immagini REXELite", "img_rexel", cartella=True)
@@ -202,10 +217,13 @@ class App(tk.Tk):
             raise ValueError("Indica il progetto Strata unico o almeno un progetto per stato limite")
         mr = {sl: (self.v[f"dist_{sl}"].get(), self.v[f"mag_{sl}"].get()) for sl in SL}
         st = self._num("st", "St")
+        dim = self._num("dimensione", "dimensione del testo") if self.v["dimensione"].get().strip() \
+            else None
         return relazione.DatiRelazione(
             vn, classe, cu, lat_w, lon_w, lat_e, lon_e, per, ris, reg, mr,
             self.v["img_disagg"].get(), self.v["img_rexel"].get(), self._campi(),
-            self.v["cat_suolo"].get(), self.v["cat_topo"].get(), st)
+            self.v["cat_suolo"].get(), self.v["cat_topo"].get(), st,
+            self.v["carattere"].get().strip(), dim)
 
     def _stampa(self, d):
         self.log(f"Sito ED50: {d.lat_ed50:.6f}, {d.lon_ed50:.6f}  VN={d.vn:g}  "

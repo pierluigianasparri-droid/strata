@@ -68,3 +68,16 @@ def test_legenda_testo_utente():
     from rsltools import relazione
     nomi = [k for k, _ in relazione.LEGENDA]
     assert nomi == ["Amax", "S", "F0", "TB", "Tc", "TD"]
+
+
+def test_applica_font():
+    from docx import Document
+    from rsltools import relazione
+    doc = Document()
+    p = doc.add_paragraph()
+    r = p.add_run("testo")
+    r.font.name = "Cambria"
+    relazione.applica_font(doc, "Arial", 10)
+    assert doc.styles["Normal"].font.name == "Arial"
+    assert doc.styles["Normal"].font.size.pt == 10
+    assert r.font.name == "Arial"
